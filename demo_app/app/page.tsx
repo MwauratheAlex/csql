@@ -1,3 +1,7 @@
+'use client'
+
+import { createOrder, createUser } from './actions';
+
 export default function HomePage() {
     return (
         <main className="container mx-auto p-6 grow">
@@ -16,29 +20,6 @@ export default function HomePage() {
         </main>
     );
 }
-
-const sendQuery = async (sqlCommand: string) => {
-    try {
-        const res = await fetch('api', {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sqlCommand)
-        });
-
-        const data = await res.json()
-
-        if (!res.ok) throw new Error(data.details || 'Unknown error')
-
-        console.log("DB Response: ", data.result)
-        return data.result;
-
-    } catch (err) {
-        console.error("Query failed:", err);
-        alert("Database Error");
-    }
-
-}
-
 
 const Header = () => {
     return (
@@ -166,30 +147,30 @@ const RegisterUserForm = () => {
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <i className="fa-solid fa-user-plus text-blue-600"></i> Register User
             </h2>
-            <form id="userForm" className="space-y-3">
+            <form id="userForm" className="space-y-3" action={createUser}>
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
                         ID (PrimaryKey)
                     </label>
-                    <input type="number" id="userId"
+                    <input type="number" name="userId"
                         className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         placeholder="e.g. 101" required />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Username</label>
-                    <input type="text" id="userName"
+                    <input type="text" name="userName"
                         className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         placeholder="e.g. alice_dev" required />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Email</label>
-                    <input type="email" id="userEmail"
+                    <input type="email" name="userEmail"
                         className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         placeholder="alice@example.com" required />
                 </div>
                 <button type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded transition-colors shadow-sm">
-                    CREATE
+                    CREATE USER
                 </button>
             </form>
         </div>
@@ -203,24 +184,24 @@ const NewOrderForm = () => {
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <i className="fa-solid fa-cart-shopping text-purple-600"></i> New Order
             </h2>
-            <form id="orderForm" className="space-y-3">
+            <form id="orderForm" className="space-y-3" action={createOrder}>
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Order
                             ID
                         </label>
-                        <input type="number" id="orderId" className="w-full p-2 border border-slate-300 rounded"
+                        <input type="number" name="orderId" className="w-full p-2 border border-slate-300 rounded"
                             placeholder="501" />
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">User ID</label>
-                        <input type="number" id="orderUserId" className="w-full p-2 border border-slate-300 rounded"
+                        <input type="number" name="userId" className="w-full p-2 border border-slate-300 rounded"
                             placeholder="101" />
                     </div>
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Item Name</label>
-                    <input type="text" id="orderItem" className="w-full p-2 border border-slate-300 rounded"
+                    <input type="text" name="orderItem" className="w-full p-2 border border-slate-300 rounded"
                         placeholder="Keyboard" />
                 </div>
                 <button type="submit"
