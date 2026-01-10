@@ -16,3 +16,11 @@ A simple relational database management system (RDBMS).
 ## Also included
 
 [] Web App demo
+
+## Resources
+
+1. [https://devtails.xyz/@adam/how-to-build-a-simple-tcp-server-in-c]
+(Blog: How to Build a Simple TCP Server in C)
+
+2. [https://www.youtube.com/watch?v=set7R_bHG_k]
+(Youtube: C Programming: TCP Server)

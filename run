@@ -1,0 +1,2 @@
+gcc -Wall -Wextra ./app/*.c -o csql_app     # app
+gcc -Wall -Wextra ./repl/*c -o csql_cli     # repl

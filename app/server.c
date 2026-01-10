@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -7,7 +8,7 @@
 #include <arpa/inet.h>
 
 #define PORT 9000
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 /**
  * server_start - starts a web server and waits for connections
@@ -52,18 +53,26 @@ void server_start() {
         int connection_fd = accept(socket_fd, (struct sockaddr *)&client_sockaddr, &client_sockaddr_len);
         if (connection_fd < 0) {
             perror("accept!");
-            exit(EXIT_FAILURE);
+            continue;
         }
+
         printf("Accepted connection from %s:%d\n", inet_ntoa(client_sockaddr.sin_addr), ntohs(client_sockaddr.sin_port));
 
-        char buffer[BUFFER_SIZE] = {};
-        if (read(connection_fd, buffer, sizeof(buffer)) > 0 ) {
-            printf("Client said %s\n", buffer);
+        char buffer[BUFFER_SIZE];
+        while (1) {
+            memset(buffer, 0, BUFFER_SIZE);
+
+            if (read(connection_fd, buffer, sizeof(buffer)) > 0 ) {
+                printf("[%s:%d] says: %s\n", inet_ntoa(client_sockaddr.sin_addr), ntohs(client_sockaddr.sin_port), buffer);
+
+                char *response = "Query Ok\n";
+                write(connection_fd, response, strlen(response));
+
+            } else {
+                printf("Client disconnected.\n");
+                break;
+            }
         }
-
-
-        char status = 0;
-        write(connection_fd, &status, 1);
 
         close(connection_fd);
     }
