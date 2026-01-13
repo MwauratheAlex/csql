@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { FaDatabase } from "react-icons/fa6";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -30,7 +31,7 @@ export default function RootLayout({
                 <nav className="bg-slate-900 text-white p-4 shadow-lg">
                     <div className="container mx-auto flex justify-between items-center">
                         <div className="flex items-center gap-3">
-                            <i className="fa-solid fa-database text-emerald-400 text-xl"></i>
+                            <FaDatabase size={20} className="fill-emerald-400" />
                             <h1 className="text-xl font-bold tracking-tight">CSQL <span
                                 className="text-slate-400 font-normal text-sm">Demo</span></h1>
                         </div>

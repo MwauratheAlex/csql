@@ -1,6 +1,16 @@
 'use client'
 
 import { createOrder, createUser } from './actions';
+import {
+    FaDiagramProject,
+    FaPen,
+    FaRotateRight,
+    FaTableColumns,
+    FaTerminal,
+    FaTrash,
+    FaUserPlus,
+    FaCartShopping
+} from "react-icons/fa6";
 
 export default function HomePage() {
     return (
@@ -26,11 +36,11 @@ const Header = () => {
         <header className="flex gap-4 border-b border-slate-200 mb-6">
             <button id="tab-visual"
                 className="pb-3 px-2 border-b-2 border-slate-900 font-semibold text-slate-900 transition-all">
-                <i className="fa-solid fa-table-columns mr-2"></i>Visual CRUD & Join
+                <FaTableColumns />
             </button>
             <button id="tab-terminal"
-                className="pb-3 px-2 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-all">
-                <i className="fa-solid fa-terminal mr-2"></i>SQL Terminal
+                className="pb-3 px-2 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2">
+                <FaTerminal size={18} /> SQL Terminal
             </button>
         </header>
     );
@@ -70,8 +80,9 @@ const UserTable = () => {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="font-bold text-slate-700">Users Table</h3>
-                <button className="text-slate-500 hover:text-blue-600 text-sm">
-                    <i className="fa-solid fa-rotate-right mr-1"></i> Refresh
+                <button className="text-slate-500 hover:text-blue-600 text-sm flex items-center gap-2">
+                    <FaRotateRight />
+                    Refresh
                 </button>
             </div>
             <div className="overflow-x-auto">
@@ -90,10 +101,12 @@ const UserTable = () => {
                             <td className="px-6 py-3 font-medium text-slate-900">alice_dev</td>
                             <td className="px-6 py-3 text-slate-500">alice@example.com</td>
                             <td className="px-6 py-3 text-right space-x-2">
-                                <button className="text-blue-600 hover:text-blue-800" title="Update"><i
-                                    className="fa-solid fa-pen"></i></button>
-                                <button className="text-red-500 hover:text-red-700" title="Delete"><i
-                                    className="fa-solid fa-trash"></i></button>
+                                <button className="text-blue-600 hover:text-blue-800" title="Update">
+                                    <FaPen />
+                                </button>
+                                <button className="text-red-500 hover:text-red-700" title="Delete">
+                                    <FaTrash />
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -108,7 +121,8 @@ const JoinDemo = () => {
         <div className="bg-indigo-50 rounded-xl border border-indigo-100 p-6">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-indigo-900 flex items-center gap-2">
-                    <i className="fa-solid fa-diagram-project"></i> Relational Join Demo
+                    <FaDiagramProject />
+                    Relational Join Demo
                 </h3>
                 <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded font-mono">
                     SELECT users.name, orders.item FROM users JOIN orders ON...
@@ -145,7 +159,8 @@ const RegisterUserForm = () => {
     return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <i className="fa-solid fa-user-plus text-blue-600"></i> Register User
+                <FaUserPlus size={20} fill="#155dfc" />
+                Register User
             </h2>
             <form id="userForm" className="space-y-3" action={createUser}>
                 <div>
@@ -182,7 +197,8 @@ const NewOrderForm = () => {
     return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <i className="fa-solid fa-cart-shopping text-purple-600"></i> New Order
+                <FaCartShopping size={20} fill="#9810fa" />
+                New Order
             </h2>
             <form id="orderForm" className="space-y-3" action={createOrder}>
                 <div className="grid grid-cols-2 gap-3">
