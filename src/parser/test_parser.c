@@ -11,7 +11,7 @@
 
 void test_create_stmt ()
 {
-    char *input = "CREATE TABLE users (id int, name text, age int);";
+    char *input = "CREATE TABLE users (id int PRIMARY KEY, email text UNIQUE);";
 
     Parser p;
     parser_init (&p, input);
@@ -26,31 +26,39 @@ void test_create_stmt ()
                 "tests[create] - table name wrong. expected=%s, got=%.*s",
                 "users", STR_FMT (s.create.table_name));
 
-    ASSERT_FMT (s.create.col_count == 3,
-                "tests[create] - column count wrong. expected=%d, got=%d", 3,
-                s.create.col_count);
-
-    ASSERT_FMT (s.create.col_count == 3,
-                "tests[create] - column count wrong. expected=%d, got=%d", 3,
+    ASSERT_FMT (s.create.col_count == 2,
+                "tests[create] - column count wrong. expected=%d, got=%d", 2,
                 s.create.col_count);
 
     ColumnDef expected_columns[3] = {
-        {str8_lit ("id"), TYPE_INT},
-        {str8_lit ("name"), TYPE_TEXT},
-        {str8_lit ("age"), TYPE_INT},
+        {str8_lit ("id"), TYPE_INT, true, false},
+        {str8_lit ("email"), TYPE_TEXT, false, true},
     };
 
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 2; i++)
     {
         ASSERT_FMT (
             str8_equals (s.create.columns[i].name, expected_columns[i].name),
             "tests[create] - column name wrong. expected=%.*s, got=%.*s",
             STR_FMT (expected_columns[i].name),
             STR_FMT (s.create.columns[i].name));
+
         ASSERT_FMT (s.create.columns[i].type == expected_columns[i].type,
                     "tests[create] - column type wrong. expected=%s, got=%s",
                     data_type_to_string (expected_columns[i].type),
                     data_type_to_string (s.create.columns[i].type));
+
+        ASSERT_FMT (s.create.columns[i].is_primary_key
+                        == expected_columns[i].is_primary_key,
+                    "tests[create] - is primary key wrong. expected=%s, got=%s",
+                    expected_columns[i].is_primary_key ? "true" : "false",
+                    s.create.columns[i].is_primary_key ? "true" : "false");
+
+        ASSERT_FMT (s.create.columns[i].is_unique
+                        == expected_columns[i].is_unique,
+                    "tests[create] - is primary key wrong. expected=%s, got=%s",
+                    expected_columns[i].is_unique ? "true" : "false",
+                    s.create.columns[i].is_unique ? "true" : "false");
     }
     printf ("PARSER: [create] All tests passed!\n");
 }
@@ -104,29 +112,29 @@ void test_select_stmt ()
 
     Statement s = parser_parse_statement (&p);
 
-    ASSERT_FMT (s.type == STMT_SELECT, "Type should be SELECT");
+    ASSERT_FMT (s.type == STMT_SELECT, "test[select] - Type should be SELECT");
 
     ASSERT_FMT (str8_equals (s.select.fields[0].table_name, str8_lit ("users")),
-                "Field 0 table");
+                "tests[select] - Field 0 table");
     ASSERT_FMT (str8_equals (s.select.fields[0].col_name, str8_lit ("name")),
-                "Field 0 name");
+                "test[select] - Field 0 name");
 
-    ASSERT_FMT (s.select.has_join == true, "Should have JOIN");
+    ASSERT_FMT (s.select.has_join == true, "test[select] - Should have JOIN");
     ASSERT_FMT (str8_equals (s.select.join_table, str8_lit ("posts")),
-                "Join table name");
+                "test[select] - Join table name");
 
     ASSERT_FMT (
         str8_equals (s.select.left_join_col.table_name, str8_lit ("users")),
-        "Left Join table");
+        "test[select] - Left Join table");
     ASSERT_FMT (str8_equals (s.select.left_join_col.col_name, str8_lit ("id")),
-                "Left Join col");
+                "test[select] - Left Join col");
 
     ASSERT_FMT (
         str8_equals (s.select.right_join_col.table_name, str8_lit ("posts")),
-        "Right Join table");
+        "test[select] - Right Join table");
     ASSERT_FMT (
         str8_equals (s.select.right_join_col.col_name, str8_lit ("user_id")),
-        "Right Join col");
+        "test[select] - Right Join col");
 
     printf ("PARSER: [select+join] All tests passed!\n");
 }
@@ -139,20 +147,22 @@ void test_delete_stmt ()
     parser_init (&p, input);
     Statement s = parser_parse_statement (&p);
 
-    ASSERT_FMT (s.type == STMT_DELETE, "Type should be STMT_DELETE");
+    ASSERT_FMT (s.type == STMT_DELETE,
+                "test[delete] - Type should be STMT_DELETE");
 
     ASSERT_FMT (str8_equals (s.delete.table_name, str8_lit ("users")),
-                "Table name wrong. Expected=users, Got=%.*s",
+                "test[delete] - Table name wrong. Expected=users, Got=%.*s",
                 STR_FMT (s.delete.table_name));
 
-    ASSERT_FMT (s.delete.has_where == true, "Should have WHERE clause");
+    ASSERT_FMT (s.delete.has_where == true,
+                "test[delete] - Should have WHERE clause");
 
     ASSERT_FMT (str8_equals (s.delete.where_col.col_name, str8_lit ("id")),
-                "Where column wrong. Expected=id, Got=%.*s",
+                "test[delete] - Where column wrong. Expected=id, Got=%.*s",
                 STR_FMT (s.delete.where_col.col_name));
 
     ASSERT_FMT (str8_equals (s.delete.where_value, str8_lit ("5")),
-                "Where value wrong. Expected=5, Got=%.*s",
+                "test[delete] - Where value wrong. Expected=5, Got=%.*s",
                 STR_FMT (s.delete.where_value));
 
     printf ("PARSER: [delete] All tests passed!\n");
@@ -167,36 +177,37 @@ void test_update_stmt ()
     parser_init (&p, input);
     Statement s = parser_parse_statement (&p);
 
-    ASSERT_FMT (s.type == STMT_UPDATE, "Type should be STMT_UPDATE");
+    ASSERT_FMT (s.type == STMT_UPDATE,
+                "test[update] - Type should be STMT_UPDATE");
 
     ASSERT_FMT (str8_equals (s.update.table_name, str8_lit ("users")),
-                "Table name check");
+                "test[update] - Table name check");
 
     ASSERT_FMT (s.update.assign_col_count == 2,
-                "Assignment count wrong. Expected=2, Got=%d",
+                "test[update] - Assignment count wrong. Expected=2, Got=%d",
                 s.update.assign_col_count);
 
     ASSERT_FMT (
         str8_equals (s.update.assignments[0].col_name, str8_lit ("name")),
-        "Assign 0 col");
+        "test[update] - Assign 0 col");
     ASSERT_FMT (str8_equals (s.update.assignments[0].value, str8_lit ("Jane")),
-                "Assign 0 val");
+                "test[update] - Assign 0 val");
 
     ASSERT_FMT (
         str8_equals (s.update.assignments[1].col_name, str8_lit ("age")),
-        "Assign 1 col");
+        "test[update] - Assign 1 col");
     ASSERT_FMT (str8_equals (s.update.assignments[1].value, str8_lit ("30")),
-                "Assign 1 val");
+                "test[update] - Assign 1 val");
 
-    ASSERT_FMT (s.update.has_where == true, "Should have WHERE");
+    ASSERT_FMT (s.update.has_where == true, "test[update] - Should have WHERE");
 
     ASSERT_FMT (str8_equals (s.update.where_col.table_name, str8_lit ("users")),
-                "Where table part");
+                "test[update] - Where table part");
     ASSERT_FMT (str8_equals (s.update.where_col.col_name, str8_lit ("id")),
-                "Where col part");
+                "test[update] - Where col part");
 
     ASSERT_FMT (str8_equals (s.update.where_value, str8_lit ("1")),
-                "Where value check");
+                "test[update] - Where value check");
 
     printf ("PARSER: [update] All tests passed!\n");
 }

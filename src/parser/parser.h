@@ -30,6 +30,9 @@ typedef struct
 {
     str8 name;
     DataType type;
+
+    bool is_primary_key;
+    bool is_unique;
 } ColumnDef;
 
 typedef struct
