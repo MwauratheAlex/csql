@@ -12,7 +12,8 @@ typedef enum
 {
     STMT_SELECT,
     STMT_INSERT,
-    STMT_CREATE,
+    STMT_CREATE_TABLE,
+    STMT_CREATE_INDEX,
     STMT_UPDATE,
     STMT_DELETE,
 
@@ -41,6 +42,13 @@ typedef struct
     int col_count;
     ColumnDef columns[MAX_COLUMNS];
 } CreateStmt;
+
+typedef struct
+{
+    str8 index_name;
+    str8 table_name;
+    str8 col_name;
+} CreateIndexStmt;
 
 // INSERT INTO users VALUES (1, 'john');
 typedef struct
@@ -115,6 +123,7 @@ typedef struct
     union
     {
         CreateStmt create;
+        CreateIndexStmt create_index;
         InsertStmt insert;
         SelectStmt select;
         UpdateStmt update;

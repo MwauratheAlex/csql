@@ -4,7 +4,8 @@
 #include <stdlib.h>
 
 static void parser_next_token (Parser *p);
-static Statement parser_parse_create (Parser *p);
+static Statement parser_parse_create_table (Parser *p);
+static Statement parser_parse_create_index (Parser *p);
 static Statement parser_parse_insert (Parser *p);
 static Statement parser_parse_select (Parser *p);
 static Statement parser_parse_delete (Parser *p);
@@ -39,7 +40,11 @@ Statement parser_parse_statement (Parser *p)
     switch (p->curr.type)
     {
     case TOKEN_CREATE:
-        return parser_parse_create (p);
+        if (p->peek.type == TOKEN_INDEX)
+        {
+            return parser_parse_create_index (p);
+        }
+        return parser_parse_create_table (p);
     case TOKEN_INSERT:
         return parser_parse_insert (p);
     case TOKEN_SELECT:
@@ -49,26 +54,26 @@ Statement parser_parse_statement (Parser *p)
     case TOKEN_DELETE:
         return parser_parse_delete (p);
     default:
-        return stmt_error ("Error: Unexpected token");
+        return stmt_error ("Unexpected token");
     }
 }
 
 // Syntax: CREATE TABLE <name> ( <col> <type>, ... );
-static Statement parser_parse_create (Parser *p)
+static Statement parser_parse_create_table (Parser *p)
 {
     Statement s;
-    s.type = STMT_CREATE;
+    s.type = STMT_CREATE_TABLE;
     s.create.col_count = 0;
 
     parser_next_token (p); // skip CREATE
     if (!parser_expect (p, TOKEN_TABLE))
     {
-        return stmt_error ("Error: Expected 'TABLE' after CREATE");
+        return stmt_error ("Expected 'TABLE' after CREATE");
     }
 
     if (p->curr.type != TOKEN_IDENT)
     {
-        return stmt_error ("Error: Expected table name");
+        return stmt_error ("Expected table name");
     }
 
     s.create.table_name = p->curr.literal;
@@ -76,7 +81,7 @@ static Statement parser_parse_create (Parser *p)
 
     if (!parser_expect (p, TOKEN_LPAREN))
     {
-        return stmt_error ("Error: Expected '(' after table name");
+        return stmt_error ("Expected '(' after table name");
     }
 
     // parse columns
@@ -92,17 +97,17 @@ static Statement parser_parse_create (Parser *p)
 
         if (p->curr.type == TOKEN_RPAREN)
         {
-            return stmt_error ("Error: Trailing comma or unexpected end");
+            return stmt_error ("Trailing comma or unexpected end");
         }
 
         if (s.create.col_count >= MAX_COLUMNS)
         {
-            return stmt_error ("Error: Too many columns");
+            return stmt_error ("Too many columns");
         }
 
         if (p->curr.type != TOKEN_IDENT)
         {
-            return stmt_error ("Error: Expected column name");
+            return stmt_error ("Expected column name");
         }
 
         str8 col_name = p->curr.literal;
@@ -119,7 +124,7 @@ static Statement parser_parse_create (Parser *p)
         }
         else
         {
-            return stmt_error ("Error: Expected type 'int' or type 'text'");
+            return stmt_error ("Expected type 'int' or type 'text'");
         }
 
         parser_next_token (p);
@@ -132,7 +137,7 @@ static Statement parser_parse_create (Parser *p)
             parser_next_token (p);
             if (!parser_expect (p, TOKEN_KEY))
             {
-                return stmt_error ("Error: Expected 'KEY' after 'PRIMARY'");
+                return stmt_error ("Expected 'KEY' after 'PRIMARY'");
             }
             is_pk = true;
         }
@@ -152,12 +157,63 @@ static Statement parser_parse_create (Parser *p)
 
     if (!parser_expect (p, TOKEN_RPAREN))
     {
-        return stmt_error ("Error: Expected ')' after columns");
+        return stmt_error ("Expected ')' after columns");
     }
 
     if (!parser_expect (p, TOKEN_SEMICOLON))
     {
-        return stmt_error ("Error: Expected ';' at end");
+        return stmt_error ("Expected ';' at end");
+    }
+
+    return s;
+}
+
+static Statement parser_parse_create_index (Parser *p)
+{
+    Statement s;
+    s.type = STMT_CREATE_INDEX;
+
+    parser_next_token (p); // skip create
+    if (!parser_expect (p, TOKEN_INDEX))
+    {
+        return stmt_error ("Expected 'INDEX'");
+    }
+
+    if (p->curr.type != TOKEN_IDENT)
+    {
+        return stmt_error ("Expected index name");
+    }
+
+    s.create_index.index_name = p->curr.literal;
+    parser_next_token (p);
+
+    if (!parser_expect (p, TOKEN_ON))
+    {
+        return stmt_error ("Expected 'ON' after index name");
+    }
+
+    if (p->curr.type != TOKEN_IDENT)
+    {
+        return stmt_error ("Expected table name");
+    }
+    s.create_index.table_name = p->curr.literal;
+    parser_next_token (p);
+
+    if (!parser_expect (p, TOKEN_LPAREN))
+    {
+        return stmt_error ("Expected '('");
+    }
+
+    if (p->curr.type != TOKEN_IDENT)
+    {
+        return stmt_error ("Expected column name");
+    }
+    s.create_index.col_name = p->curr.literal;
+    parser_next_token (p);
+
+    if (!parser_expect (p, TOKEN_RPAREN))
+    {
+        return stmt_error ("Expected ')'");
     }
 
     return s;
@@ -174,12 +230,12 @@ static Statement parser_parse_insert (Parser *p)
 
     if (!parser_expect (p, TOKEN_INTO))
     {
-        return stmt_error ("Error: Expected 'INTO' after INSERT");
+        return stmt_error ("Expected 'INTO' after INSERT");
     }
 
     if (p->curr.type != TOKEN_IDENT)
     {
-        return stmt_error ("Error: Expected table name after INTO");
+        return stmt_error ("Expected table name after INTO");
     }
 
     s.insert.table_name = p->curr.literal;
@@ -187,12 +243,12 @@ static Statement parser_parse_insert (Parser *p)
 
     if (!parser_expect (p, TOKEN_VALUES))
     {
-        return stmt_error ("Error: Expected 'VALUES' after table name");
+        return stmt_error ("Expected 'VALUES' after table name");
     }
 
     if (!parser_expect (p, TOKEN_LPAREN))
     {
-        return stmt_error ("Error: Expected '(' after VALUES");
+        return stmt_error ("Expected '(' after VALUES");
     }
 
     bool first = true;
@@ -213,7 +269,7 @@ static Statement parser_parse_insert (Parser *p)
 
         if (s.insert.val_count >= MAX_COLUMNS)
         {
-            return stmt_error ("Error: Too many values");
+            return stmt_error ("Too many values");
         }
 
         if (p->curr.type == TOKEN_INT || p->curr.type == TOKEN_STRING)
@@ -223,18 +279,18 @@ static Statement parser_parse_insert (Parser *p)
         }
         else
         {
-            return stmt_error ("Error: Expected integer or string literal");
+            return stmt_error ("Expected integer or string literal");
         }
     }
 
     if (!parser_expect (p, TOKEN_RPAREN))
     {
-        return stmt_error ("Error: Expected ')' after values");
+        return stmt_error ("Expected ')' after values");
     }
 
     if (!parser_expect (p, TOKEN_SEMICOLON))
     {
-        return stmt_error ("Error: Expected ';' at end");
+        return stmt_error ("Expected ';' at end");
     }
 
     return s;
@@ -270,13 +326,12 @@ static Statement parser_parse_select (Parser *p)
             ColumnRef col = parser_parse_column_ref (p);
             if (col.col_name.str == NULL)
             {
-                return stmt_error (
-                    "Error: Expected column name or '*' in SELECT");
+                return stmt_error ("Expected column name or '*' in SELECT");
             }
 
             if (s.select.field_count >= MAX_COLUMNS)
             {
-                return stmt_error ("Error: Too many columns in SELECT");
+                return stmt_error ("Too many columns in SELECT");
             }
 
             s.select.fields[s.select.field_count++] = col;
@@ -285,12 +340,12 @@ static Statement parser_parse_select (Parser *p)
 
     if (!parser_expect (p, TOKEN_FROM))
     {
-        return stmt_error ("Error: Expected 'FROM' after field list");
+        return stmt_error ("Expected 'FROM' after field list");
     }
 
     if (p->curr.type != TOKEN_IDENT)
     {
-        return stmt_error ("Error: Expected table name");
+        return stmt_error ("Expected table name");
     }
     s.select.table_name = p->curr.literal;
     parser_next_token (p);
@@ -302,31 +357,31 @@ static Statement parser_parse_select (Parser *p)
 
         if (p->curr.type != TOKEN_IDENT)
         {
-            return stmt_error ("Error: Expected table name after JOIN");
+            return stmt_error ("Expected table name after JOIN");
         }
         s.select.join_table = p->curr.literal;
         parser_next_token (p);
 
         if (!parser_expect (p, TOKEN_ON))
         {
-            return stmt_error ("Error: Expected 'ON' after JOIN table");
+            return stmt_error ("Expected 'ON' after JOIN table");
         }
 
         s.select.left_join_col = parser_parse_column_ref (p);
         if (s.select.left_join_col.col_name.str == NULL)
         {
-            return stmt_error ("Error: Expected left join column in ON");
+            return stmt_error ("Expected left join column in ON");
         }
 
         if (!parser_expect (p, TOKEN_ASSIGN))
         {
-            return stmt_error ("Error: Expected '=' in ON");
+            return stmt_error ("Expected '=' in ON");
         }
 
         s.select.right_join_col = parser_parse_column_ref (p);
         if (s.select.right_join_col.col_name.str == NULL)
         {
-            return stmt_error ("Error: Expected right join column in ON");
+            return stmt_error ("Expected right join column in ON");
         }
     }
 
@@ -338,12 +393,12 @@ static Statement parser_parse_select (Parser *p)
         s.select.where_column = parser_parse_column_ref (p);
         if (s.select.where_column.col_name.str == NULL)
         {
-            return stmt_error ("Error: Expected column in WHERE");
+            return stmt_error ("Expected column in WHERE");
         }
 
         if (!parser_expect (p, TOKEN_ASSIGN))
         {
-            return stmt_error ("Error: Expected '=' in WHERE");
+            return stmt_error ("Expected '=' in WHERE");
         }
 
         if (p->curr.type == TOKEN_INT || p->curr.type == TOKEN_STRING)
@@ -353,13 +408,13 @@ static Statement parser_parse_select (Parser *p)
         }
         else
         {
-            return stmt_error ("Error: Expected value in WHERE");
+            return stmt_error ("Expected value in WHERE");
         }
     }
 
     if (!parser_expect (p, TOKEN_SEMICOLON))
     {
-        return stmt_error ("Error: Expected ';' at end of SELECT");
+        return stmt_error ("Expected ';' at end of SELECT");
     }
 
     return s;
@@ -405,12 +460,12 @@ static Statement parser_parse_delete (Parser *p)
     parser_next_token (p);
     if (!parser_expect (p, TOKEN_FROM))
     {
-        return stmt_error ("Error: Expected 'FROM' after DELETE");
+        return stmt_error ("Expected 'FROM' after DELETE");
     }
 
     if (p->curr.type != TOKEN_IDENT)
     {
-        return stmt_error ("Error: Expected 'table name'");
+        return stmt_error ("Expected 'table name'");
     }
 
     s.delete.table_name = p->curr.literal;
@@ -424,12 +479,12 @@ static Statement parser_parse_delete (Parser *p)
         s.delete.where_col = parser_parse_column_ref (p);
         if (s.delete.where_col.col_name.str == NULL)
         {
-            return stmt_error ("Error: Expected column in WHERE");
+            return stmt_error ("Expected column in WHERE");
         }
 
         if (!parser_expect (p, TOKEN_ASSIGN))
         {
-            return stmt_error ("Error: Expected '=' in WHERE");
+            return stmt_error ("Expected '=' in WHERE");
         }
         if (p->curr.type == TOKEN_INT || p->curr.type == TOKEN_STRING)
         {
@@ -438,13 +493,13 @@ static Statement parser_parse_delete (Parser *p)
         }
         else
         {
-            return stmt_error ("Error: Expected value in WHERE");
+            return stmt_error ("Expected value in WHERE");
         }
     }
 
     if (!parser_expect (p, TOKEN_SEMICOLON))
     {
-        return stmt_error ("Error: Expected ';'");
+        return stmt_error ("Expected ';'");
     }
 
     return s;
@@ -461,14 +516,14 @@ static Statement parser_parse_update (Parser *p)
     parser_next_token (p);
     if (p->curr.type != TOKEN_IDENT)
     {
-        return stmt_error ("Error: Expected table name");
+        return stmt_error ("Expected table name");
     }
     s.update.table_name = p->curr.literal;
     parser_next_token (p);
 
     if (!parser_expect (p, TOKEN_SET))
     {
-        return stmt_error ("Error: Expected SET");
+        return stmt_error ("Expected SET");
     }
 
     bool first = true;
@@ -483,27 +538,26 @@ static Statement parser_parse_update (Parser *p)
 
         if (p->curr.type != TOKEN_IDENT)
         {
-            return stmt_error ("Error: Expected column name");
+            return stmt_error ("Expected column name");
         }
         str8 col_name = p->curr.literal;
         parser_next_token (p);
 
         if (!parser_expect (p, TOKEN_ASSIGN))
         {
-            return stmt_error ("Error: Expected '='");
+            return stmt_error ("Expected '='");
         }
 
         if (p->curr.type != TOKEN_INT && p->curr.type != TOKEN_STRING)
         {
-            return stmt_error (
-                "Error: Expected value (int or text) in SET clause");
+            return stmt_error ("Expected value (int or text) in SET clause");
         }
         str8 val = p->curr.literal;
         parser_next_token (p);
 
         if (s.update.assign_col_count >= MAX_COLUMNS)
         {
-            return stmt_error ("Error: Too many assignments");
+            return stmt_error ("Too many assignments");
         }
 
         int i = s.update.assign_col_count++;
@@ -519,11 +573,11 @@ static Statement parser_parse_update (Parser *p)
         s.update.where_col = parser_parse_column_ref (p);
         if (s.update.where_col.col_name.str == NULL)
         {
-            return stmt_error ("Error: Expected column in WHERE");
+            return stmt_error ("Expected column in WHERE");
         }
         if (!parser_expect (p, TOKEN_ASSIGN))
         {
-            return stmt_error ("Error: Expected '='");
+            return stmt_error ("Expected '='");
         }
 
         if (p->curr.type == TOKEN_INT || p->curr.type == TOKEN_STRING)
@@ -533,13 +587,13 @@ static Statement parser_parse_update (Parser *p)
         }
         else
         {
-            return stmt_error ("Error: Expected value in WHERE");
+            return stmt_error ("Expected value in WHERE");
         }
     }
 
     if (!parser_expect (p, TOKEN_SEMICOLON))
     {
-        return stmt_error ("Error: Expected ';' at end");
+        return stmt_error ("Expected ';' at end");
     }
 
     return s;

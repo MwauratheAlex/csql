@@ -1,9 +1,11 @@
 #include "server.h"
 
+#include "../btree/btree.h"
 #include "threadpool.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -12,12 +14,47 @@
 
 ThreadPool conn_pool;
 
+#define GLOBAL_HEAP_SIZE (SIZE_MB * 64)
+unsigned char global_buffer[GLOBAL_HEAP_SIZE];
+Arena global_arena;
+
 /**
  * server_start - starts a web server and waits for connections
  */
 void server_start ()
 {
-    thread_pool_init (&conn_pool);
+    arena_init (&global_arena, global_buffer, GLOBAL_HEAP_SIZE);
+
+    Database *db = push_struct_zero (&global_arena, Database);
+    db->global_arena = &global_arena;
+
+    db->pager = pager_open (&global_arena, "csql.db");
+    if (db->pager == NULL)
+    {
+        fprintf (stderr, "Error: Could not open file %s\n", "csql.db");
+        exit (EXIT_FAILURE);
+    }
+
+    if (pthread_mutex_init (&db->lock, NULL) != 0)
+    {
+        perror ("DB Mutex Init failed");
+        exit (EXIT_FAILURE);
+    }
+
+    if (db->pager->num_pages == 0)
+    {
+        // page 0 - catalog root
+        void *page_zero = pager_get_page (db->global_arena, db->pager, 0);
+        initialize_leaf_node (page_zero);
+        set_node_root (page_zero, 1);
+        db->pager->num_pages = 1;
+    }
+    else
+    {
+        catalog_init_from_disk (db);
+    }
+
+    thread_pool_init (&conn_pool, db);
 
     struct sockaddr_in server_sockaddr;
     int opt = 1;
@@ -77,5 +114,6 @@ void server_start ()
         thread_pool_submit (&conn_pool, client_fd, client_sockaddr);
     }
 
+    pager_close (db->pager);
     close (socket_fd);
 }

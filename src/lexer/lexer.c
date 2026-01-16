@@ -57,6 +57,7 @@ Token lexer_next_token (Lexer *l)
         t = token_new (TOKEN_EOF, lit_empty);
         break;
     case '\'':
+    case '"':
         return lexer_read_string (l);
     default:
         if (isalpha (l->ch) || l->ch == '_')
@@ -132,17 +133,18 @@ static Token lexer_read_number (Lexer *l)
 
 static Token lexer_read_string (Lexer *l)
 {
+    char quote = l->ch;
     lexer_read_char (l); // skip opening quote
 
     int start = l->position;
-    while (l->ch != '\'' && l->ch != 0)
+    while (l->ch != quote && l->ch != 0)
     {
         lexer_read_char (l);
     }
     str8 literal = str8_from_range ((uint8_t *) (l->input.str + start),
                                     (uint8_t *) (l->input.str + l->position));
 
-    if (l->ch == '\'')
+    if (l->ch == quote)
         lexer_read_char (l); // skip closing quote
 
     return token_new (TOKEN_STRING, literal);
@@ -150,48 +152,50 @@ static Token lexer_read_string (Lexer *l)
 
 static TokenType lookup_ident (str8 ident)
 {
-    if (str8_equals (ident, str8_lit ("CREATE")))
+    if (str8_match (ident, str8_lit ("CREATE"), true))
         return TOKEN_CREATE;
-    if (str8_equals (ident, str8_lit ("TABLE")))
+    if (str8_match (ident, str8_lit ("INDEX"), true))
+        return TOKEN_INDEX;
+    if (str8_match (ident, str8_lit ("TABLE"), true))
         return TOKEN_TABLE;
-    if (str8_equals (ident, str8_lit ("INSERT")))
+    if (str8_match (ident, str8_lit ("INSERT"), true))
         return TOKEN_INSERT;
-    if (str8_equals (ident, str8_lit ("INTO")))
+    if (str8_match (ident, str8_lit ("INTO"), true))
         return TOKEN_INTO;
-    if (str8_equals (ident, str8_lit ("VALUES")))
+    if (str8_match (ident, str8_lit ("VALUES"), true))
         return TOKEN_VALUES;
-    if (str8_equals (ident, str8_lit ("SELECT")))
+    if (str8_match (ident, str8_lit ("SELECT"), true))
         return TOKEN_SELECT;
-    if (str8_equals (ident, str8_lit ("FROM")))
+    if (str8_match (ident, str8_lit ("FROM"), true))
         return TOKEN_FROM;
-    if (str8_equals (ident, str8_lit ("UPDATE")))
+    if (str8_match (ident, str8_lit ("UPDATE"), true))
         return TOKEN_UPDATE;
-    if (str8_equals (ident, str8_lit ("SET")))
+    if (str8_match (ident, str8_lit ("SET"), true))
         return TOKEN_SET;
-    if (str8_equals (ident, str8_lit ("DELETE")))
+    if (str8_match (ident, str8_lit ("DELETE"), true))
         return TOKEN_DELETE;
 
-    if (str8_equals (ident, str8_lit ("WHERE")))
+    if (str8_match (ident, str8_lit ("WHERE"), true))
         return TOKEN_WHERE;
-    if (str8_equals (ident, str8_lit ("AND")))
+    if (str8_match (ident, str8_lit ("AND"), true))
         return TOKEN_AND;
-    if (str8_equals (ident, str8_lit ("OR")))
+    if (str8_match (ident, str8_lit ("OR"), true))
         return TOKEN_OR;
-    if (str8_equals (ident, str8_lit ("JOIN")))
+    if (str8_match (ident, str8_lit ("JOIN"), true))
         return TOKEN_JOIN;
-    if (str8_equals (ident, str8_lit ("ON")))
+    if (str8_match (ident, str8_lit ("ON"), true))
         return TOKEN_ON;
 
-    if (str8_equals (ident, str8_lit ("PRIMARY")))
+    if (str8_match (ident, str8_lit ("PRIMARY"), true))
         return TOKEN_PRIMARY;
-    if (str8_equals (ident, str8_lit ("KEY")))
+    if (str8_match (ident, str8_lit ("KEY"), true))
         return TOKEN_KEY;
-    if (str8_equals (ident, str8_lit ("UNIQUE")))
+    if (str8_match (ident, str8_lit ("UNIQUE"), true))
         return TOKEN_UNIQUE;
 
-    if (str8_equals (ident, str8_lit ("int")))
+    if (str8_match (ident, str8_lit ("int"), true))
         return TOKEN_INT_TYPE;
-    if (str8_equals (ident, str8_lit ("text")))
+    if (str8_match (ident, str8_lit ("text"), true))
         return TOKEN_TEXT_TYPE;
 
     return TOKEN_IDENT;

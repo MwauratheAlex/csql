@@ -25,6 +25,7 @@ typedef enum
     TOKEN_TEXT_TYPE,
 
     TOKEN_CREATE,
+    TOKEN_INDEX,
     TOKEN_INSERT,
     TOKEN_SELECT,
     TOKEN_UPDATE,

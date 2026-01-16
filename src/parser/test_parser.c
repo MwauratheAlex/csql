@@ -18,7 +18,7 @@ void test_create_stmt ()
 
     Statement s = parser_parse_statement (&p);
 
-    ASSERT_FMT (s.type == STMT_CREATE,
+    ASSERT_FMT (s.type == STMT_CREATE_TABLE,
                 "tests[create] - statement type wrong. expected=CREATE. msg=%s",
                 s.error.msg);
 

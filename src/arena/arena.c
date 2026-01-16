@@ -1,13 +1,14 @@
 #include "arena.h"
 
-bool
-is_power_of_two (uintptr_t x)
+#include <stdbool.h>
+#include <string.h>
+
+bool is_power_of_two (uintptr_t x)
 {
     return (x & (x - 1)) == 0;
 }
 
-uintptr_t
-align_forward (uintptr_t ptr, size_t align)
+uintptr_t align_forward (uintptr_t ptr, size_t align)
 {
     uintptr_t p, a, modulo;
 
@@ -31,8 +32,7 @@ align_forward (uintptr_t ptr, size_t align)
 #define DEFAULT_ALIGNMENT (2 * sizeof (void *))
 #endif
 
-void
-arena_init (Arena *a, void *backing_buffer, size_t backing_buffer_length)
+void arena_init (Arena *a, void *backing_buffer, size_t backing_buffer_length)
 {
     a->buf = (unsigned char *) backing_buffer;
     a->buf_len = backing_buffer_length;
@@ -40,8 +40,7 @@ arena_init (Arena *a, void *backing_buffer, size_t backing_buffer_length)
     a->prev_offset = 0;
 }
 
-void *
-arena_alloc_align (Arena *a, size_t size, size_t align)
+void *arena_alloc_align (Arena *a, size_t size, size_t align, ArenaFlag zero)
 {
     // Align 'curr_offset' forward to the specified alignment
     uintptr_t curr_ptr = (uintptr_t) a->buf + (uintptr_t) a->curr_offset;
@@ -56,7 +55,10 @@ arena_alloc_align (Arena *a, size_t size, size_t align)
         a->curr_offset = offset + size;
 
         // Zero new memory by default
-        memset (ptr, 0, size);
+        if (zero == ArenaFlag_Zero)
+        {
+            memset (ptr, 0, size);
+        }
         return ptr;
     }
     // Return NULL if the arena is out of memory (or handle differently)
@@ -64,21 +66,18 @@ arena_alloc_align (Arena *a, size_t size, size_t align)
 }
 
 // Because C doesn't have default parameters
-void *
-arena_alloc (Arena *a, size_t size)
+void *arena_alloc (Arena *a, size_t size, ArenaFlag zero)
 {
-    return arena_alloc_align (a, size, DEFAULT_ALIGNMENT);
+    return arena_alloc_align (a, size, DEFAULT_ALIGNMENT, zero);
 }
 
-void
-arena_free (Arena *a, void *ptr)
+void arena_free (Arena *a, void *ptr)
 {
     // Do nothing
 }
 
-void *
-arena_resize_align (Arena *a, void *old_memory, size_t old_size,
-                    size_t new_size, size_t align)
+void *arena_resize_align (Arena *a, void *old_memory, size_t old_size,
+                          size_t new_size, size_t align, ArenaFlag zero)
 {
     unsigned char *old_mem = (unsigned char *) old_memory;
 
@@ -86,7 +85,7 @@ arena_resize_align (Arena *a, void *old_memory, size_t old_size,
 
     if (old_mem == NULL || old_size == 0)
     {
-        return arena_alloc_align (a, new_size, align);
+        return arena_alloc_align (a, new_size, align, zero);
     }
     else if (a->buf <= old_mem && old_mem < a->buf + a->buf_len)
     {
@@ -96,13 +95,17 @@ arena_resize_align (Arena *a, void *old_memory, size_t old_size,
             if (new_size > old_size)
             {
                 // Zero the new memory by default
-                memset (&a->buf[a->curr_offset], 0, new_size - old_size);
+                if (zero == ArenaFlag_Zero)
+                {
+                    memset (a->buf + a->prev_offset + old_size, 0,
+                            new_size - old_size);
+                }
             }
             return old_memory;
         }
         else
         {
-            void *new_memory = arena_alloc_align (a, new_size, align);
+            void *new_memory = arena_alloc_align (a, new_size, align, zero);
             size_t copy_size = old_size < new_size ? old_size : new_size;
             // Copy across old memory to the new memory
             memmove (new_memory, old_memory, copy_size);
@@ -117,22 +120,20 @@ arena_resize_align (Arena *a, void *old_memory, size_t old_size,
 }
 
 // Because C doesn't have default parameters
-void *
-arena_resize (Arena *a, void *old_memory, size_t old_size, size_t new_size)
+void *arena_resize (Arena *a, void *old_memory, size_t old_size,
+                    size_t new_size, ArenaFlag zero)
 {
     return arena_resize_align (a, old_memory, old_size, new_size,
-                               DEFAULT_ALIGNMENT);
+                               DEFAULT_ALIGNMENT, zero);
 }
 
-void
-arena_free_all (Arena *a)
+void arena_free_all (Arena *a)
 {
     a->curr_offset = 0;
     a->prev_offset = 0;
 }
 
-Temp_Arena_Memory
-temp_arena_memory_begin (Arena *a)
+Temp_Arena_Memory temp_arena_memory_begin (Arena *a)
 {
     Temp_Arena_Memory temp;
     temp.arena = a;
@@ -141,8 +142,7 @@ temp_arena_memory_begin (Arena *a)
     return temp;
 }
 
-void
-temp_arena_memory_end (Temp_Arena_Memory temp)
+void temp_arena_memory_end (Temp_Arena_Memory temp)
 {
     temp.arena->prev_offset = temp.prev_offset;
     temp.arena->curr_offset = temp.curr_offset;

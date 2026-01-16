@@ -1,7 +1,7 @@
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: 'false'
 AlignConsecutiveDeclarations: 'false'
-AlignEscapedNewlines: Left
+AlignEscapedNewlines: Right
 AlignOperands: 'true'
 AlignTrailingComments: 'true'
 AllowAllParametersOfDeclarationOnNextLine: 'false'
@@ -38,4 +38,7 @@ SpaceInEmptyParentheses: 'false'
 SpacesInCStyleCastParentheses: 'false'
 SpacesInParentheses: 'false'
 SpacesInSquareBrackets: 'false'
+
+AlignConsecutiveMacros: true
+
 UseTab: Never

@@ -14,14 +14,15 @@ Run the command below to build everything.
 
 ## Supports
 
-[] Declaring tables with a few column data types
-[] CRUD operations
+[x] Declaring tables with a few column data types
+[x] CRUD operations
+[x] Joining
+
 [] Basic indexing
 [] Primary and unique keying
-[] Joining
 
-[] SQL Interface
-[] Interactive Repl Mode
+[x] SQL Interface
+[x] Interactive Repl Mode
 
 ## Also included
 

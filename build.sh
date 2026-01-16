@@ -69,12 +69,7 @@ cd build
 # compile
 if [ -v server ]; then 
     echo "[building server...]"
-    $compile \
-        ../src/app/main.c \
-        ../src/app/server.c \
-        ../src/app/threadpool.c \
-        ../src/engine/token.c \
-        ../src/engine/parser.c \
+    $compile ../src/app/main.c \
     $compile_link $out csql
     echo "csql built"
 fi
