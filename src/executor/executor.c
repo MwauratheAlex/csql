@@ -4,10 +4,12 @@
 #include "../btree/btree.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 static ExecuteResult execute_create_table (Statement *stmt, Database *db);
@@ -45,7 +47,7 @@ static ExecuteResult execute_create_table (Statement *stmt, Database *db)
 {
     if (db_find_table (db, stmt->create.table_name) != NULL)
     {
-        return EXECUTE_TABLE_NOT_EXISTS;
+        return EXECUTE_TABLE_EXISTS;
     }
 
     uint32_t new_root_page = db->pager->num_pages++;
@@ -110,6 +112,10 @@ static ExecuteResult execute_create_table (Statement *stmt, Database *db)
 
 static ExecuteResult execute_create_index (Statement *stmt, Database *db)
 {
+    unsigned char local_buffer[PAGE_SIZE];
+    Arena local_arena;
+    arena_init (&local_arena, local_buffer, sizeof (local_buffer));
+
     Table *t = db_find_table (db, stmt->create_index.table_name);
     if (!t)
     {
@@ -168,14 +174,14 @@ static ExecuteResult execute_create_index (Statement *stmt, Database *db)
             continue;
         }
 
-        Temp_Arena_Memory scratch = temp_arena_memory_begin (db->global_arena);
+        Temp_Arena_Memory scratch = temp_arena_memory_begin (&local_arena);
 
         void *key, *val;
         uint32_t klen, val_len;
         slot_get_content (table_root, i, &key, &klen, &val, &val_len);
 
         str8 row_strings[MAX_COLUMNS];
-        deserialize_row_to_strings (t, val, row_strings, db->global_arena);
+        deserialize_row_to_strings (t, val, row_strings, &local_arena);
 
         str8 index_key = row_strings[col_idx];
         str8 pk_val = row_strings[pk_idx];
@@ -278,20 +284,20 @@ static ExecuteResult execute_insert (Statement *stmt, Database *db)
 static ExecuteResult execute_select (Statement *stmt, Database *db,
                                      int client_fd)
 {
+    unsigned char local_buffer[PAGE_SIZE];
+    Arena local_arena;
+    arena_init (&local_arena, local_buffer, sizeof (local_buffer));
+
     Table *t1 = db_find_table (db, stmt->select.table_name);
     if (!t1)
-    {
         return EXECUTE_TABLE_NOT_EXISTS;
-    }
 
     Table *t2 = NULL;
     if (stmt->select.has_join)
     {
         t2 = db_find_table (db, stmt->select.join_table);
         if (!t2)
-        {
             return EXECUTE_TABLE_NOT_EXISTS;
-        }
     }
 
     typedef struct
@@ -299,23 +305,16 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
         Table *t;
         int idx;
     } ColMap;
-
     ColMap output_cols[MAX_COLUMNS];
     int output_count = 0;
 
     if (stmt->select.field_count == 0)
     {
         for (int i = 0; i < t1->col_count; i++)
-        {
             output_cols[output_count++] = (ColMap) {t1, i};
-        }
         if (t2)
-        {
             for (int i = 0; i < t2->col_count; i++)
-            {
                 output_cols[output_count++] = (ColMap) {t2, i};
-            }
-        }
     }
     else
     {
@@ -326,9 +325,7 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
             if (resolve_column (t1, t2, stmt->select.fields[i], &target_t,
                                 &target_idx)
                 == -1)
-            {
                 return EXECUTE_COL_NOT_FOUND;
-            }
             output_cols[output_count++] = (ColMap) {target_t, target_idx};
         }
     }
@@ -348,7 +345,6 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
         }
     }
 
-    Temp_Arena_Memory scratch = temp_arena_memory_begin (db->global_arena);
     if (use_index)
     {
         void *idx_page = pager_get_page (db->global_arena, db->pager,
@@ -362,10 +358,7 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
         for (int k = 0; k < idx_h->num_cells; k++)
         {
             if (idx_slots[k].size == 0)
-            {
                 continue;
-            }
-
             void *ik, *iv;
             uint32_t ikl, ivl;
             slot_get_content (idx_page, k, &ik, &ikl, &iv, &ivl);
@@ -385,38 +378,53 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
                     if (rkl == ivl && memcmp (rk, iv, rkl) == 0)
                     {
                         Temp_Arena_Memory print_scratch =
-                            temp_arena_memory_begin (db->global_arena);
+                            temp_arena_memory_begin (&local_arena);
+
                         str8 row_vals[MAX_COLUMNS];
                         deserialize_row_to_strings (t1, rv, row_vals,
-                                                    db->global_arena);
+                                                    &local_arena);
 
                         char buffer[4096];
                         int b = 0;
-                        b += snprintf (buffer + b, 4096 - b, "(");
+                        b += snprintf (buffer + b, sizeof (buffer) - b, "(");
+
                         for (int c = 0; c < output_count; c++)
                         {
+                            if (b >= sizeof (buffer) - 10)
+                                break;
+                            ColMap map = output_cols[c];
                             str8 val = row_vals[output_cols[c].idx];
                             bool is_text = output_cols[c]
                                                .t->columns[output_cols[c].idx]
                                                .type
                                            == TYPE_TEXT;
+
                             if (c > 0)
-                            {
-                                b += snprintf (buffer + b, 4096 - b, ", ");
-                            }
+                                b += snprintf (buffer + b, sizeof (buffer) - b,
+                                               ", ");
                             if (is_text)
-                            {
-                                b += snprintf (buffer + b, 4096 - b, "\"%.*s\"",
-                                               STR_FMT (val));
-                            }
+                                b += snprintf (buffer + b, sizeof (buffer) - b,
+                                               "\"%.*s\"", STR_FMT (val));
                             else
-                            {
-                                b += snprintf (buffer + b, 4096 - b, "%.*s",
-                                               STR_FMT (val));
-                            }
+                                b += snprintf (buffer + b, sizeof (buffer) - b,
+                                               "%.*s", STR_FMT (val));
                         }
-                        b += snprintf (buffer + b, 4096 - b, ")\n");
-                        write (client_fd, buffer, b);
+
+                        if (b < sizeof (buffer) - 2)
+                            b += snprintf (buffer + b, sizeof (buffer) - b,
+                                           ")\n");
+                        else
+                        {
+                            buffer[sizeof (buffer) - 2] = ')';
+                            buffer[sizeof (buffer) - 1] = '\n';
+                        }
+
+                        if (send (client_fd, buffer, b, MSG_NOSIGNAL) == -1)
+                        {
+                            temp_arena_memory_end (print_scratch);
+                            return EXECUTE_SUCCESS;
+                        }
+                        // Reset local arena
                         temp_arena_memory_end (print_scratch);
                     }
                 }
@@ -436,10 +444,7 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
             if (resolve_column (t1, t2, stmt->select.where_column, &where_table,
                                 &where_col_idx)
                 == -1)
-            {
                 return EXECUTE_COL_NOT_FOUND;
-            }
-
             if (where_table->columns[where_col_idx].type == TYPE_INT)
             {
                 char temp[32];
@@ -458,27 +463,21 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
         int join_l_idx = -1;
         Table *join_r_t = NULL;
         int join_r_idx = -1;
-
         if (stmt->select.has_join)
         {
             if (resolve_column (t1, t2, stmt->select.left_join_col, &join_l_t,
                                 &join_l_idx)
                 == -1)
-            {
                 return EXECUTE_COL_NOT_FOUND;
-            }
             if (resolve_column (t1, t2, stmt->select.right_join_col, &join_r_t,
                                 &join_r_idx)
                 == -1)
-            {
                 return EXECUTE_COL_NOT_FOUND;
-            }
         }
 
         SlottedPageHeader *h1 = (SlottedPageHeader *) pager_get_page (
             db->global_arena, db->pager, t1->root_page_num);
         Slot *slots1 = (Slot *) ((uint8_t *) h1 + sizeof (SlottedPageHeader));
-
         SlottedPageHeader *h2 = NULL;
         Slot *slots2 = NULL;
         if (t2)
@@ -488,15 +487,10 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
             slots2 = (Slot *) ((uint8_t *) h2 + sizeof (SlottedPageHeader));
         }
 
-        Temp_Arena_Memory scratch = temp_arena_memory_begin (db->global_arena);
-
         for (int i = 0; i < h1->num_cells; i++)
         {
             if (slots1[i].size == 0)
-            {
                 continue;
-            }
-
             void *key1, *val1;
             uint32_t klen1, vlen1;
             slot_get_content (h1, i, &key1, &klen1, &val1, &vlen1);
@@ -505,20 +499,20 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
             {
                 if (!row_matches_predicate (t1, val1, where_col_idx,
                                             where_val_ptr))
-                {
                     continue;
-                }
             }
 
-            str8 t1_vals[MAX_COLUMNS];
-            deserialize_row_to_strings (t1, val1, t1_vals, db->global_arena);
+            Temp_Arena_Memory outer_scratch =
+                temp_arena_memory_begin (&local_arena);
 
+            str8 t1_vals[MAX_COLUMNS];
+            deserialize_row_to_strings (t1, val1, t1_vals, &local_arena);
             int loop_count = (t2) ? h2->num_cells : 1;
 
             for (int j = 0; j < loop_count; j++)
             {
                 Temp_Arena_Memory inner_scratch =
-                    temp_arena_memory_begin (db->global_arena);
+                    temp_arena_memory_begin (&local_arena);
                 str8 *t2_vals = NULL;
 
                 if (t2)
@@ -528,7 +522,6 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
                         temp_arena_memory_end (inner_scratch);
                         continue;
                     }
-
                     void *key2, *val2;
                     uint32_t klen2, vlen2;
                     slot_get_content (h2, j, &key2, &klen2, &val2, &vlen2);
@@ -542,11 +535,9 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
                             continue;
                         }
                     }
-
-                    t2_vals =
-                        push_array_zero (db->global_arena, str8, MAX_COLUMNS);
+                    t2_vals = push_array_zero (&local_arena, str8, MAX_COLUMNS);
                     deserialize_row_to_strings (t2, val2, t2_vals,
-                                                db->global_arena);
+                                                &local_arena);
 
                     if (stmt->select.has_join)
                     {
@@ -554,7 +545,6 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
                                                       : t2_vals[join_l_idx];
                         str8 val_r = (join_r_t == t1) ? t1_vals[join_r_idx]
                                                       : t2_vals[join_r_idx];
-
                         if (!str8_match (val_l, val_r, false))
                         {
                             temp_arena_memory_end (inner_scratch);
@@ -565,45 +555,58 @@ static ExecuteResult execute_select (Statement *stmt, Database *db,
 
                 char buffer[4096];
                 int b = 0;
-                b += snprintf (buffer + b, 4096 - b, "(");
+                b += snprintf (buffer + b, sizeof (buffer) - b, "(");
 
                 for (int k = 0; k < output_count; k++)
                 {
+                    if (b >= sizeof (buffer) - 10)
+                        break;
+
                     ColMap map = output_cols[k];
                     str8 val =
                         (map.t == t1) ? t1_vals[map.idx] : t2_vals[map.idx];
-
                     bool is_text = map.t->columns[map.idx].type == TYPE_TEXT;
 
                     if (k > 0)
-                    {
-                        b += snprintf (buffer + b, 4096 - b, ", ");
-                    }
+                        b += snprintf (buffer + b, sizeof (buffer) - b, ", ");
                     if (is_text)
-                    {
-                        b += snprintf (buffer + b, 4096 - b, "\"%.*s\"",
-                                       STR_FMT (val));
-                    }
+                        b += snprintf (buffer + b, sizeof (buffer) - b,
+                                       "\"%.*s\"", STR_FMT (val));
                     else
-                    {
-                        b += snprintf (buffer + b, 4096 - b, "%.*s",
+                        b += snprintf (buffer + b, sizeof (buffer) - b, "%.*s",
                                        STR_FMT (val));
-                    }
                 }
-                b += snprintf (buffer + b, 4096 - b, ")\n");
-                write (client_fd, buffer, b);
+
+                if (b < sizeof (buffer) - 2)
+                    b += snprintf (buffer + b, sizeof (buffer) - b, ")\n");
+                else
+                {
+                    buffer[sizeof (buffer) - 2] = ')';
+                    buffer[sizeof (buffer) - 1] = '\n';
+                }
+
+                if (send (client_fd, buffer, b, MSG_NOSIGNAL) == -1)
+                {
+                    temp_arena_memory_end (inner_scratch);
+                    temp_arena_memory_end (outer_scratch);
+                    return EXECUTE_SUCCESS;
+                }
 
                 temp_arena_memory_end (inner_scratch);
             }
+            temp_arena_memory_end (outer_scratch);
         }
     }
 
-    temp_arena_memory_end (scratch);
     return EXECUTE_SUCCESS;
 }
 
 static ExecuteResult execute_delete (Statement *stmt, Database *db)
 {
+    unsigned char local_buffer[PAGE_SIZE];
+    Arena local_arena;
+    arena_init (&local_arena, local_buffer, sizeof (local_buffer));
+
     Table *t = db_find_table (db, stmt->delete.table_name);
     if (!t)
     {
@@ -663,8 +666,6 @@ static ExecuteResult execute_delete (Statement *stmt, Database *db)
         pk_idx = 0;
     }
 
-    Temp_Arena_Memory scratch = temp_arena_memory_begin (db->global_arena);
-
     for (int i = 0; i < header->num_cells; i++)
     {
         if (slots[i].size == 0)
@@ -683,8 +684,9 @@ static ExecuteResult execute_delete (Statement *stmt, Database *db)
 
         if (should_delete)
         {
+            Temp_Arena_Memory scratch = temp_arena_memory_begin (&local_arena);
             str8 row_vals[MAX_COLUMNS];
-            deserialize_row_to_strings (t, val, row_vals, db->global_arena);
+            deserialize_row_to_strings (t, val, row_vals, &local_arena);
 
             for (int idx_i = 0; idx_i < db->index_count; idx_i++)
             {
@@ -730,13 +732,13 @@ static ExecuteResult execute_delete (Statement *stmt, Database *db)
                     }
                 }
             }
+            temp_arena_memory_end (scratch);
+
             slots[i].size = 0;
             slots[i].offset = 0;
             delete_count++;
         }
     }
-
-    temp_arena_memory_end (scratch);
 
     if (delete_count > 0)
     {
@@ -748,6 +750,10 @@ static ExecuteResult execute_delete (Statement *stmt, Database *db)
 
 static ExecuteResult execute_update (Statement *stmt, Database *db)
 {
+    unsigned char local_buffer[131072]; // 128 KB for pending updates
+    Arena local_arena;
+    arena_init (&local_arena, local_buffer, sizeof (local_buffer));
+
     Table *t = db_find_table (db, stmt->update.table_name);
     if (!t)
     {
@@ -812,8 +818,6 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
     SlottedPageHeader *header = (SlottedPageHeader *) root_node;
     Slot *slots = (Slot *) ((uint8_t *) root_node + sizeof (SlottedPageHeader));
 
-    Temp_Arena_Memory scratch = temp_arena_memory_begin (db->global_arena);
-
     typedef struct
     {
         uint8_t *data;
@@ -825,7 +829,7 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
     } PendingRows;
 
     PendingRows *pending_inserts =
-        push_array_no_zero (db->global_arena, PendingRows, 100);
+        push_array_no_zero (&local_arena, PendingRows, 100);
     int pending_count = 0;
     int updated_count = 0;
 
@@ -852,8 +856,10 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
 
         if (match)
         {
+            Temp_Arena_Memory row_scratch =
+                temp_arena_memory_begin (&local_arena);
             str8 row_values[MAX_COLUMNS];
-            deserialize_row_to_strings (t, val, row_values, db->global_arena);
+            deserialize_row_to_strings (t, val, row_values, &local_arena);
 
             for (int idx_i = 0; idx_i < db->index_count; idx_i++)
             {
@@ -918,7 +924,10 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
             }
 
             uint8_t *new_row_buf =
-                push_array_zero (db->global_arena, uint8_t, PAGE_SIZE);
+                push_array_zero (&local_arena, uint8_t, PAGE_SIZE);
+            if (!new_row_buf)
+                return EXECUTE_DB_FULL; // buffer full
+
             uint32_t new_size = serialize_row (t, row_values, new_row_buf);
 
             uint32_t cell_header_size = sizeof (uint32_t) + key_len;
@@ -930,6 +939,8 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
                     (uint8_t *) root_node + slots[i].offset + cell_header_size;
                 memcpy (dest, new_row_buf, new_size);
                 slots[i].size = total_new_size;
+
+                temp_arena_memory_end (row_scratch);
             }
             else
             {
@@ -958,6 +969,10 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
                     }
                     pending_count++;
                 }
+                else
+                {
+                    temp_arena_memory_end (row_scratch);
+                }
             }
             updated_count++;
         }
@@ -980,7 +995,6 @@ static ExecuteResult execute_update (Statement *stmt, Database *db)
         pager_flush (db->pager, t->root_page_num);
     }
 
-    temp_arena_memory_end (scratch);
     return EXECUTE_SUCCESS;
 }
 

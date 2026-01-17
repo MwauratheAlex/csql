@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -252,7 +253,7 @@ void deserialize_print_row (Table *table, void *row_data, int client_fd)
     }
 
     buf_len += snprintf (buffer + buf_len, sizeof (buffer) - buf_len, ")\n");
-    write (client_fd, buffer, buf_len);
+    send (client_fd, buffer, buf_len, MSG_NOSIGNAL);
 }
 
 void deserialize_row_to_strings (Table *t, void *row_data, str8 *out_values,

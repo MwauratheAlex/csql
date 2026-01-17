@@ -173,7 +173,7 @@ bool pager_slotted_insert (void *node, void *key, uint32_t key_size, void *val,
     memcpy (heap_ptr + 4, key, key_size);
     memcpy (heap_ptr + 4 + key_size, val, val_size);
 
-    // 4. Update Slot Directory
+    // Update Slot Directory
     Slot *slots = (Slot *) ((uint8_t *) node + sizeof (SlottedPageHeader));
     slots[header->num_cells].offset = header->data_start;
     slots[header->num_cells].size = total_payload;

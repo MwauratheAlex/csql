@@ -7,7 +7,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define PAGE_SIZE       4096
+// 32 KiB - should be 4096(4KiB) since computers read in this block size,
+// but since we don't have page splitting yet and our tables take one page, we
+// increase this.
+// TODO  implement page splitting later
+#define PAGE_SIZE       32768
 #define TABLE_MAX_PAGES 100
 
 /**

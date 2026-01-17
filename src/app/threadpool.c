@@ -4,6 +4,7 @@
 #include "../parser/parser.h"
 
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,10 +71,6 @@ static void *worker_loop (void *arg)
     ThreadPool *pool = (ThreadPool *) arg;
     char buffer[4096];
 
-    unsigned char conn_buffer[SIZE_MB];
-    Arena conn_arena;
-    arena_init (&conn_arena, conn_buffer, SIZE_MB);
-
     while (1)
     {
         pthread_mutex_lock (&pool->queue.lock);
@@ -89,18 +86,23 @@ static void *worker_loop (void *arg)
 
         pthread_mutex_unlock (&pool->queue.lock);
 
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop (AF_INET, &(task.client_sockaddr.sin_addr), client_ip,
+                   INET_ADDRSTRLEN);
+
         printf ("[Thread %lu] Accepted Session: %s:%d\n",
-                (unsigned long) pthread_self (),
-                inet_ntoa (task.client_sockaddr.sin_addr),
+                (unsigned long) pthread_self (), client_ip,
                 ntohs (task.client_sockaddr.sin_port));
 
         while (1)
         {
             memset (buffer, 0, 4096);
-            int bytes_read = read (task.client_fd, buffer, 4096);
+            int bytes_read = read (task.client_fd, buffer, sizeof (buffer) - 1);
 
             if (bytes_read <= 0)
+            {
                 break;
+            }
 
             buffer[bytes_read] = '\0';
 
@@ -110,17 +112,14 @@ static void *worker_loop (void *arg)
 
             if (stmt.type == STMT_ERROR)
             {
-                write (task.client_fd, "Error: ", 7);
-                write (task.client_fd, stmt.error.msg, strlen (stmt.error.msg));
-                write (task.client_fd, "\n", 1);
-                write (task.client_fd, "",
-                       1); // null terminator to show done
+                send (task.client_fd, "Error: ", 7, MSG_NOSIGNAL);
+                send (task.client_fd, stmt.error.msg, strlen (stmt.error.msg),
+                      MSG_NOSIGNAL);
+                send (task.client_fd, "\n\0", 2, MSG_NOSIGNAL);
                 continue;
             }
 
             pthread_mutex_lock (&pool->db->lock);
-
-            char *result_msg = NULL;
             ExecuteResult result =
                 execute_statement (&stmt, pool->db, task.client_fd);
             pthread_mutex_unlock (&pool->db->lock);
@@ -128,35 +127,40 @@ static void *worker_loop (void *arg)
             switch (result)
             {
             case EXECUTE_SUCCESS:
-                write (task.client_fd, "OK.\n", 4);
+                send (task.client_fd, "OK.\n", 4, MSG_NOSIGNAL);
                 break;
             case EXECUTE_DB_FULL:
-                write (task.client_fd, "Error: Database full.\n", 22);
+                send (task.client_fd, "Error: Database full.\n", 22,
+                      MSG_NOSIGNAL);
                 break;
             case EXECUTE_TABLE_EXISTS:
-                write (task.client_fd, "Error: Table exists.\n", 21);
+                send (task.client_fd, "Error: Table exists.\n", 21,
+                      MSG_NOSIGNAL);
                 break;
             case EXECUTE_TABLE_FULL:
-                write (task.client_fd, "Error: Table full.\n", 19);
+                send (task.client_fd, "Error: Table full.\n", 19, MSG_NOSIGNAL);
                 break;
             case EXECUTE_TABLE_NOT_EXISTS:
-                write (task.client_fd, "Error: Table not found.\n", 24);
+                send (task.client_fd, "Error: Table not found.\n", 24,
+                      MSG_NOSIGNAL);
                 break;
             case EXECUTE_TABLE_COL_COUNT_MISMATCH:
-                write (task.client_fd, "Error: Column count mismatch.\n", 30);
+                send (task.client_fd, "Error: Column count mismatch.\n", 30,
+                      MSG_NOSIGNAL);
                 break;
             case EXECUTE_COL_NOT_FOUND:
-                write (task.client_fd, "Error: Column not found.\n", 25);
+                send (task.client_fd, "Error: Column not found.\n", 25,
+                      MSG_NOSIGNAL);
                 break;
             case EXECUTE_DUPLICATE_KEY:
-                write (task.client_fd, "Error: Duplicate key.\n", 22);
+                send (task.client_fd, "Error: Duplicate key.\n", 22,
+                      MSG_NOSIGNAL);
                 break;
             default:
-                write (task.client_fd, "Execution failed.\n", 10);
+                send (task.client_fd, "Execution failed.\n", 18, MSG_NOSIGNAL);
                 break;
             }
-            write (task.client_fd, "",
-                   1); // null terminator so show done
+            send (task.client_fd, "", 1, MSG_NOSIGNAL); // null terminator
         }
 
         close (task.client_fd);
