@@ -220,13 +220,19 @@ const NewOrderForm = () => {
                         placeholder="Keyboard" />
                 </div>
                 <button type="submit"
-                    className="w-full bg-blue-600  hover:bg-purple-700 text-white font-medium py-2 rounded transition-colors shadow-sm">
+                    className="w-full bg-blue-600  hover:bg-blue-800 text-white font-medium py-2 rounded transition-colors shadow-sm">
                     CREATE (Foreign Key)
                 </button>
             </form>
         </div>
     );
 }
+
+
+
+
+
+
 
 
 
