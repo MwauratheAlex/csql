@@ -91,7 +91,11 @@ void server_start ()
         perror ("listening failed!");
         exit (EXIT_FAILURE);
     };
-    printf ("CSQL Server listening on port %d\n", PORT);
+
+    char server_ip[INET_ADDRSTRLEN];
+    inet_ntop (AF_INET, &(server_sockaddr.sin_addr), server_ip,
+               INET_ADDRSTRLEN);
+    printf ("CSQL Server listening on %s:%d\n", server_ip, PORT);
 
     struct sockaddr_in client_sockaddr;
     socklen_t client_sockaddr_len = sizeof (client_sockaddr);

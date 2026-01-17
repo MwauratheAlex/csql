@@ -3,7 +3,8 @@
 #include "lexer.h"
 #include "stdio.h"
 
-// For easier compilation
+// unity build
+#include "../arena/arena.c"
 #include "../str/str.c"
 #include "../token/token.c"
 #include "lexer.c"

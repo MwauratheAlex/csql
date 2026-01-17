@@ -1,7 +1,8 @@
 #include "../testing/testing.h"
 #include "parser.h"
 
-// build includes
+// unity includes
+#include "../arena/arena.c"
 #include "../lexer/lexer.c"
 #include "../str/str.c"
 #include "../token/token.c"
